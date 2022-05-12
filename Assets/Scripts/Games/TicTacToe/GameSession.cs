@@ -4,15 +4,17 @@ using System.Collections.Generic;
 using System.Linq;
 using Common.Graph;
 using UnityEngine;
+using UnityEngine.EventSystems;
 
 namespace Games.TicTacToe
 {
     public class GameSession : MonoBehaviour
     {
         [SerializeField] private GameDifficulty m_difficulty = GameDifficulty.Hard;
-        
         [SerializeField] [Range(0.2f, 2.5f)] private float m_thinkSeconds = 1.0f;
-        
+        [SerializeField] [Range(0.0f, 0.5f)] private float m_cameraShakeIntensity = 0.05f;
+        [SerializeField] [Range(0.0f, 0.5f)] private float m_cameraShakeDuration = 0.05f;
+
         private GameState m_state = GameState.Empty;
         private Dictionary<GraphCoordinates, GameCell> m_cells;
 
@@ -29,7 +31,6 @@ namespace Games.TicTacToe
             GameWonEvent += banner.OnGameWon;
             GameDrawEvent += banner.OnGameDraw;
             GameResetEvent += banner.OnGameReset;
-            BlockInputEvent += banner.OnBlockInput;
             
             m_cells = FindObjectsOfType<GameCell>()
                 .ToDictionary(cell => new GraphCoordinates(cell.PositionX, cell.PositionY), cell => cell);
@@ -45,16 +46,25 @@ namespace Games.TicTacToe
             }
             
             GameUtils.AddCells(m_state, m_cells.Keys, UpdateState);
+
+            var raycaster = FindObjectOfType<PhysicsRaycaster>();
+            BlockInputEvent += block => raycaster.enabled = !block;
+            
+            var cameraShake = FindObjectOfType<GameCameraShake>();
+            StateChangedEvent += _ => cameraShake.Shake(m_cameraShakeIntensity, m_cameraShakeDuration);
         }
 
-        private void OnCellClicked(GraphCoordinates coordinates)
+        private void OnCellClicked(GraphCoordinates coordinates) =>
+            StartCoroutine(BlockInputAndExecuteTurn(coordinates));
+
+        private IEnumerator BlockInputAndExecuteTurn(GraphCoordinates coordinates)
         {
             BlockInput();
-            StartCoroutine(ExecuteTurnWithDelay(coordinates, 2.0f));
+            yield return ExecuteTurnWithDelay(coordinates);
             UnblockInput();
         }
 
-        private IEnumerator ExecuteTurnWithDelay(GraphCoordinates coordinates, float delaySeconds)
+        private IEnumerator ExecuteTurnWithDelay(GraphCoordinates coordinates)
         {
             SetOwner(coordinates, GameCellOwner.X);
             yield return Think();
@@ -80,11 +90,11 @@ namespace Games.TicTacToe
             }
             
             SetOwner(aiCell, GameCellOwner.O);
-            yield return Think();
             
             if (GameUtils.TryFindOwnerWin(m_state, GameCellOwner.O, out var winningLineO))
             {
                 Debug.Log("Player O has won!");
+                yield return Think();
                 GameWonEvent?.Invoke(GameCellOwner.O, winningLineO);
                 yield break;
             }
@@ -92,6 +102,7 @@ namespace Games.TicTacToe
             if (GameUtils.IsBoardFull(m_state))
             {
                 Debug.Log("Draw Game!");
+                yield return Think();
                 GameDrawEvent?.Invoke();
                 yield break;
             }
