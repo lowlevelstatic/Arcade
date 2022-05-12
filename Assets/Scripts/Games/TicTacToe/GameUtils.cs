@@ -8,6 +8,8 @@ namespace Games.TicTacToe
 {
     public static class GameUtils
     {
+        private static readonly Random _random = new();
+        
         public static void AddCells(
             GameState state,
             IEnumerable<GraphCoordinates> cellCoordinates,
@@ -23,25 +25,28 @@ namespace Games.TicTacToe
             changed?.Invoke(edit.EndEdit());
         }
 
-        public static void AddOwner(
+        public static bool TryAddOwner(
             GameState state,
             GraphCoordinates coordinates,
             GameCellOwner owner,
-            Action<GameState> changed)
+            out GameState newState)
         {
             if (!state.Nodes.TryGetNodeAtCoordinates(coordinates, out var node))
             {
-                return;
+                newState = default;
+                return false;
             }
 
             if (state.NodeOwners.HasVariety(node))
             {
-                return;
+                newState = default;
+                return false;
             }
 
             var edit = state.BeginEdit();
             edit.NodeOwners.SetVariety(node, owner);
-            changed?.Invoke(edit.EndEdit());
+            newState = edit.EndEdit();
+            return true;
         }
 
         public static bool TryFindOwnerWin(
@@ -121,5 +126,12 @@ namespace Games.TicTacToe
             edit.NodeOwners.Clear();
             changed?.Invoke(edit.EndEdit());
         }
+
+        public static GameCellOwner Other(this GameCellOwner source) => source switch
+        {
+            GameCellOwner.O => GameCellOwner.X,
+            GameCellOwner.X => GameCellOwner.O,
+            _ => throw new ArgumentOutOfRangeException(nameof(source), source, "Unknown GameCellOwner")
+        };
     }
 }

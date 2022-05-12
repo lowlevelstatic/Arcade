@@ -8,6 +8,8 @@ namespace Games.TicTacToe
 {
     public class GameSession : MonoBehaviour
     {
+        [SerializeField] private GameDifficulty m_difficulty = GameDifficulty.Hard;
+        
         private GameState m_state = GameState.Empty;
         private Dictionary<GraphCoordinates, GameCell> m_cells;
 
@@ -57,8 +59,14 @@ namespace Games.TicTacToe
                 GameDrawEvent?.Invoke();
                 return;
             }
+
+            if (!GameAI.TryPickCell(m_state, GameCellOwner.O, m_difficulty, out var aiCell))
+            {
+                Debug.Log("Failed to complete AI turn.");
+                return;
+            }
             
-            SetOwner(GameAI.PickRandomCell(m_state), GameCellOwner.O);
+            SetOwner(aiCell, GameCellOwner.O);
             
             if (GameUtils.TryFindOwnerWin(m_state, GameCellOwner.O, out var winningLineO))
             {
@@ -75,8 +83,13 @@ namespace Games.TicTacToe
             }
         }
 
-        private void SetOwner(GraphCoordinates coordinates, GameCellOwner owner) =>
-            GameUtils.AddOwner(m_state, coordinates, owner, UpdateState);
+        private void SetOwner(GraphCoordinates coordinates, GameCellOwner owner)
+        {
+            if (GameUtils.TryAddOwner(m_state, coordinates, owner, out var newState))
+            {
+                UpdateState(newState);
+            }
+        }
 
         private void ResetGame()
         {
