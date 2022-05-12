@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using Common.Graph;
@@ -10,6 +11,8 @@ namespace Games.TicTacToe
     {
         [SerializeField] private GameDifficulty m_difficulty = GameDifficulty.Hard;
         
+        [SerializeField] [Range(0.2f, 2.5f)] private float m_thinkSeconds = 1.0f;
+        
         private GameState m_state = GameState.Empty;
         private Dictionary<GraphCoordinates, GameCell> m_cells;
 
@@ -17,6 +20,7 @@ namespace Games.TicTacToe
         public event Action<GameCellOwner, List<GraphCoordinates>> GameWonEvent;
         public event Action GameDrawEvent;
         public event Action GameResetEvent;
+        public event Action<bool> BlockInputEvent;
 
         private void Start()
         {
@@ -25,6 +29,7 @@ namespace Games.TicTacToe
             GameWonEvent += banner.OnGameWon;
             GameDrawEvent += banner.OnGameDraw;
             GameResetEvent += banner.OnGameReset;
+            BlockInputEvent += banner.OnBlockInput;
             
             m_cells = FindObjectsOfType<GameCell>()
                 .ToDictionary(cell => new GraphCoordinates(cell.PositionX, cell.PositionY), cell => cell);
@@ -44,42 +49,51 @@ namespace Games.TicTacToe
 
         private void OnCellClicked(GraphCoordinates coordinates)
         {
-            SetOwner(coordinates, GameCellOwner.X);
+            BlockInput();
+            StartCoroutine(ExecuteTurnWithDelay(coordinates, 2.0f));
+            UnblockInput();
+        }
 
+        private IEnumerator ExecuteTurnWithDelay(GraphCoordinates coordinates, float delaySeconds)
+        {
+            SetOwner(coordinates, GameCellOwner.X);
+            yield return Think();
+            
             if (GameUtils.TryFindOwnerWin(m_state, GameCellOwner.X, out var winningLineX))
             {
                 Debug.Log("Player X has won!");
                 GameWonEvent?.Invoke(GameCellOwner.X, winningLineX);
-                return;
+                yield break;
             }
 
             if (GameUtils.IsBoardFull(m_state))
             {
                 Debug.Log("Draw Game!");
                 GameDrawEvent?.Invoke();
-                return;
+                yield break;
             }
 
             if (!GameAI.TryPickCell(m_state, GameCellOwner.O, m_difficulty, out var aiCell))
             {
                 Debug.Log("Failed to complete AI turn.");
-                return;
+                yield break;
             }
             
             SetOwner(aiCell, GameCellOwner.O);
+            yield return Think();
             
             if (GameUtils.TryFindOwnerWin(m_state, GameCellOwner.O, out var winningLineO))
             {
                 Debug.Log("Player O has won!");
                 GameWonEvent?.Invoke(GameCellOwner.O, winningLineO);
-                return;
+                yield break;
             }
 
             if (GameUtils.IsBoardFull(m_state))
             {
                 Debug.Log("Draw Game!");
                 GameDrawEvent?.Invoke();
-                return;
+                yield break;
             }
         }
 
@@ -99,9 +113,17 @@ namespace Games.TicTacToe
 
         private void UpdateState(GameState state)
         {
-            Debug.Log("Updating Game State");
             m_state = state;
             StateChangedEvent?.Invoke(state);
+        }
+
+        private void BlockInput() => BlockInputEvent?.Invoke(true);
+
+        private void UnblockInput() => BlockInputEvent?.Invoke(false);
+
+        private IEnumerator Think()
+        {
+            yield return new WaitForSeconds(m_thinkSeconds);
         }
     }
 }

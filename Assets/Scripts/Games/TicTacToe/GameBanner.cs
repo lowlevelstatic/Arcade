@@ -77,5 +77,10 @@ namespace Games.TicTacToe
                 letter.SetActive(false);
             }
         }
+
+        public void OnBlockInput(bool block)
+        {
+            m_collider.enabled = block;
+        }
     }
 }
